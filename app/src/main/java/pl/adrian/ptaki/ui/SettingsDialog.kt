@@ -23,12 +23,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import pl.adrian.ptaki.Journal
+import pl.adrian.ptaki.Player
 import pl.adrian.ptaki.Prefs
+import java.util.Locale
 
 @Composable
 fun SettingsDialog(onDismiss: () -> Unit) {
     var thr by remember { mutableFloatStateOf(Prefs.threshold) }
     var loc by remember { mutableStateOf(Prefs.locationFilter) }
+    var clips by remember { mutableStateOf(Prefs.saveClips) }
+    var clipsMb by remember { mutableStateOf(Journal.clipsBytes() / 1_048_576f) }
+    var confirmWipe by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -64,6 +70,38 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     )
                 }
                 Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Zapisuj nagrania w dzienniku", color = C.text, fontSize = 16.sp)
+                        Text(
+                            "3 s najpewniejszego fragmentu każdej obserwacji (ok. 140 kB). " +
+                                "Teraz zajmują: ${String.format(Locale.US, "%.1f", clipsMb)} MB.",
+                            color = C.text2, fontSize = 13.sp
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Switch(
+                        checked = clips,
+                        onCheckedChange = { clips = it; Prefs.saveClips = it },
+                        colors = SwitchDefaults.colors(checkedTrackColor = C.moss, checkedThumbColor = C.live)
+                    )
+                }
+                if (clipsMb > 0f) {
+                    TextButton(onClick = {
+                        if (confirmWipe) {
+                            Player.stop()
+                            Journal.deleteAllClips()
+                            clipsMb = 0f
+                            confirmWipe = false
+                        } else confirmWipe = true
+                    }) {
+                        Text(
+                            if (confirmWipe) "Na pewno? Dotknij jeszcze raz (dziennik zostaje)" else "Usuń wszystkie nagrania",
+                            color = C.accent
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
                 HorizontalDivider(color = C.line)
                 Spacer(Modifier.height(12.dp))
                 Text(

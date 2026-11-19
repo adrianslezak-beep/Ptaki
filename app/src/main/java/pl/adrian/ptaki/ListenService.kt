@@ -81,12 +81,14 @@ class ListenService : Service() {
         // Filtr gatunków wg miejsca i pory roku
         val allowed: BooleanArray? = if (Prefs.locationFilter) {
             val loc = lastLocation()
+            Journal.location = loc?.let { it.latitude to it.longitude }
             val (lat, lon, approx) = if (loc != null) Triple(loc.latitude, loc.longitude, false)
             else Triple(52.1, 19.4, true)
             Hub.filterInfo.value = if (approx) "Filtr gatunków: Polska (brak lokalizacji)"
             else String.format(Locale.US, "Filtr gatunków: okolice %.1f°N %.1f°E", lat, lon)
             model.allowedAt(lat, lon)
         } else {
+            Journal.location = lastLocation()?.let { it.latitude to it.longitude }
             Hub.filterInfo.value = "Filtr gatunków wyłączony — cały świat"
             null
         }
@@ -117,7 +119,7 @@ class ListenService : Service() {
                 for (buf in queue) {
                     val input = if (sr == 48_000) buf else resample(buf, model.inputLen)
                     val scores = model.predict(input)
-                    handle(scores, model, allowed)
+                    handle(scores, model, allowed, input)
                 }
             }
 
@@ -154,7 +156,7 @@ class ListenService : Service() {
         }
     }
 
-    private fun handle(scores: FloatArray, model: BirdNet, allowed: BooleanArray?) {
+    private fun handle(scores: FloatArray, model: BirdNet, allowed: BooleanArray?, audio: FloatArray) {
         val thr = Prefs.threshold
         val hits = ArrayList<Pair<Int, Float>>()
         for (i in scores.indices) {
@@ -165,7 +167,7 @@ class ListenService : Service() {
         if (hits.isEmpty()) return
         hits.sortByDescending { it.second }
         val top = hits.take(3).map { model.labels[it.first] to it.second }
-        Hub.report(top)
+        Hub.report(top, audio)
         val text = "Słychać: " + top.joinToString { it.first.name }
         if (text != lastNotified) {
             lastNotified = text

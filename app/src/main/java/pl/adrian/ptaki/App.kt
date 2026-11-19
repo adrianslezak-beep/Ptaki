@@ -26,6 +26,7 @@ class App : Application(), ImageLoaderFactory {
         super.onCreate()
         Prefs.init(this)
         Wiki.init(this)
+        Journal.init(this)
     }
 
     override fun newImageLoader(): ImageLoader =
@@ -51,4 +52,9 @@ object Prefs {
     var locationFilter: Boolean
         get() = sp.getBoolean("locFilter", true)
         set(v) = sp.edit().putBoolean("locFilter", v).apply()
+
+    /** Czy zapisywać 3-sekundowe nagranie każdej obserwacji. */
+    var saveClips: Boolean
+        get() = sp.getBoolean("saveClips", true)
+        set(v) = sp.edit().putBoolean("saveClips", v).apply()
 }

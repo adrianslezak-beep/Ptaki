@@ -51,19 +51,20 @@ object Hub {
     }
 
     /** Wywoływane z wątku modelu po każdym 3-sekundowym oknie. */
-    fun report(hits: List<Pair<Label, Float>>) {
+    fun report(hits: List<Pair<Label, Float>>, audio: FloatArray?) {
         val now = System.currentTimeMillis()
         val col = spectrogram.total - COLS_PER_SEC * 3 / 2   // środek analizowanego okna
         val map = detections.value.associateBy { it.sci }.toMutableMap()
         val newMarkers = ArrayList<Marker>()
         for ((lab, conf) in hits) {
+            Journal.record(lab, conf, now, audio)
             val pct = "${(conf * 100).toInt()}%"
             val old = map[lab.sci]
             if (old == null) {
                 map[lab.sci] = Detection(lab.sci, lab.name, now, now, 1, conf, conf)
                 newMarkers += Marker(col, "${lab.name} $pct")
             } else {
-                val newOccurrence = now - old.last > 8_000
+                val newOccurrence = now - old.last > Journal.GAP_MS
                 map[lab.sci] = old.copy(
                     last = now,
                     count = old.count + if (newOccurrence) 1 else 0,

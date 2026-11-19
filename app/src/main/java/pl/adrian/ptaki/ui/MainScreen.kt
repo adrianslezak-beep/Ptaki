@@ -37,6 +37,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.FlutterDash
 import androidx.compose.material.icons.outlined.Tune
@@ -85,9 +86,15 @@ fun fmtTime(t: Long): String = timeFmt.format(Date(t))
 @Composable
 fun AppRoot() {
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    var journal by rememberSaveable { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val dets by Hub.detections.collectAsStateWithLifecycle()
-    val selectedDet = dets.firstOrNull { it.sci == selected }
+
+    @Composable
+    fun LeftPane(modifier: Modifier) {
+        if (journal) JournalPane(selected, { selected = it }, { journal = false; selected = null }, modifier)
+        else MainPane(dets, selected, { selected = it }, { showSettings = true }, { journal = true; selected = null }, modifier)
+    }
 
     BoxWithConstraints(
         Modifier
@@ -98,21 +105,20 @@ fun AppRoot() {
         val wide = maxWidth >= 700.dp   // rozłożony Fold — dwa panele
         if (wide) {
             Row(Modifier.fillMaxSize()) {
-                MainPane(
-                    dets, selected, { selected = it }, { showSettings = true },
-                    Modifier.weight(1f).fillMaxHeight()
-                )
+                LeftPane(Modifier.weight(1f).fillMaxHeight())
                 Box(Modifier.width(1.dp).fillMaxHeight().background(C.line))
                 Box(Modifier.weight(1f).fillMaxHeight()) {
-                    if (selectedDet != null) DetailPane(selectedDet, onClose = null)
-                    else Placeholder()
+                    val s = selected
+                    if (s != null) DetailPane(s, onClose = null) else Placeholder()
                 }
             }
+            BackHandler(enabled = journal) { journal = false; selected = null }
         } else {
-            MainPane(dets, selected, { selected = it }, { showSettings = true }, Modifier.fillMaxSize())
-            if (selectedDet != null) {
-                BackHandler { selected = null }
-                DetailPane(selectedDet, onClose = { selected = null })
+            LeftPane(Modifier.fillMaxSize())
+            val s = selected
+            if (s != null) DetailPane(s, onClose = { selected = null })
+            BackHandler(enabled = s != null || journal) {
+                if (selected != null) selected = null else journal = false
             }
         }
     }
@@ -138,6 +144,7 @@ private fun MainPane(
     selected: String?,
     onSelect: (String) -> Unit,
     onSettings: () -> Unit,
+    onJournal: () -> Unit,
     modifier: Modifier,
 ) {
     val ctx = LocalContext.current
@@ -185,6 +192,9 @@ private fun MainPane(
                 IconButton(onClick = { Hub.clear() }) {
                     Icon(Icons.Outlined.DeleteSweep, "Wyczyść listę", tint = C.text2)
                 }
+            }
+            IconButton(onClick = onJournal) {
+                Icon(Icons.Outlined.AutoStories, "Dziennik obserwacji", tint = C.accent)
             }
             IconButton(onClick = onSettings) {
                 Icon(Icons.Outlined.Tune, "Ustawienia", tint = C.text2)
@@ -286,16 +296,25 @@ private fun StartButton(running: Boolean, loading: Boolean, onClick: () -> Unit)
 }
 
 @Composable
-fun rememberWiki(d: Detection): Pair<Boolean, WikiInfo?> {
-    val state by produceState(Wiki.cached(d.sci).let { (it == null) to it }, d.sci) {
-        if (value.second == null) value = false to Wiki.get(d.sci, d.name)
+fun rememberWiki(sci: String, name: String): Pair<Boolean, WikiInfo?> {
+    val state by produceState(Wiki.cached(sci).let { (it == null) to it }, sci) {
+        if (value.second == null) value = false to Wiki.get(sci, name)
     }
     return state
 }
 
 @Composable
 private fun DetectionRow(d: Detection, isSelected: Boolean, live: Boolean, onClick: () -> Unit) {
-    val (_, info) = rememberWiki(d)
+    SpeciesRow(
+        d.sci, d.name,
+        "${fmtTime(d.last)} · ${(d.lastConf * 100).toInt()}%" + if (d.count > 1) " · ×${d.count}" else "",
+        isSelected, live, onClick
+    )
+}
+
+@Composable
+fun SpeciesRow(sci: String, name: String, info3: String, isSelected: Boolean, live: Boolean, onClick: () -> Unit) {
+    val (_, info) = rememberWiki(sci, name)
     Row(
         Modifier
             .fillMaxWidth()
@@ -313,7 +332,7 @@ private fun DetectionRow(d: Detection, isSelected: Boolean, live: Boolean, onCli
             if (info?.thumb != null) {
                 AsyncImage(
                     model = info.thumb,
-                    contentDescription = d.name,
+                    contentDescription = name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -324,14 +343,11 @@ private fun DetectionRow(d: Detection, isSelected: Boolean, live: Boolean, onCli
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                d.name, color = C.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                name, color = C.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                 fontFamily = Serif, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
-            Text(d.sci, color = C.text2, fontSize = 13.sp, fontStyle = FontStyle.Italic, maxLines = 1)
-            Text(
-                "${fmtTime(d.last)} · ${(d.lastConf * 100).toInt()}%" + if (d.count > 1) " · ×${d.count}" else "",
-                color = C.text2.copy(alpha = 0.8f), fontSize = 12.sp
-            )
+            Text(sci, color = C.text2, fontSize = 13.sp, fontStyle = FontStyle.Italic, maxLines = 1)
+            Text(info3, color = C.text2.copy(alpha = 0.8f), fontSize = 12.sp)
         }
         if (live) {
             Text(
